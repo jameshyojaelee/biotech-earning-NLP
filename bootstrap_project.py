@@ -30,7 +30,7 @@ def write_file_if_missing(path: Path, content: str) -> None:
     print(f"wrote file: {path}")
 
 
-def main(base_dir: str = "earnings_nlp") -> None:
+def main(base_dir: str = ".") -> None:
     base = Path(base_dir)
 
     dirs = [
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Bootstrap earnings NLP project structure without overwriting existing files.")
     parser.add_argument(
         "--base-dir",
-        default="earnings_nlp",
-        help="Root directory for the project structure (default: earnings_nlp)",
+        default=".",
+        help="Root directory for the project structure (default: current directory)",
     )
     args = parser.parse_args()
     main(args.base_dir)
