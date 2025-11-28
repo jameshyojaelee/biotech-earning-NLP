@@ -13,7 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 import statsmodels.api as sm
 
-from finance.surprise import compute_beat_miss_flag
+from ..finance.surprise import compute_beat_miss_flag
 
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "config.yaml"

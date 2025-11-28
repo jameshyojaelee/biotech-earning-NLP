@@ -43,6 +43,9 @@ def main() -> None:
     tickers = sorted(df["ticker"].unique())
     ticker = st.sidebar.selectbox("Select ticker", tickers)
     return_options = [col for col in ["abn_ret_1d", "abn_ret_5d"] if col in df.columns]
+    if not return_options:
+        st.error("No abnormal return columns found.")
+        return
     return_col = st.sidebar.selectbox("Return window", return_options, format_func=lambda x: x.replace("_", " "))
     ticker_df = df[df["ticker"] == ticker].sort_values("earnings_date")
 
