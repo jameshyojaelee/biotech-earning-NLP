@@ -17,11 +17,19 @@ This project ingests biotech earnings call transcripts, scores sentiment, and li
 - **Event windows**: Short windows around the earnings date (e.g., +1d, +5d) used to measure market reaction to the event.
 
 ## Finance Math (event-study basics)
-- **Single-day return** on day *t*: $r_t = (P_t - P_{t-1}) / P_{t-1}$
-- **Event-window return** from start to end date: $R_{\text{window}} = (P_{\text{end}} - P_{\text{start}}) / P_{\text{start}}$
-- **Abnormal return** relative to a benchmark (here XBI): $\text{AR}_{\text{window}} = R_{\text{stock, window}} - R_{\text{benchmark, window}}$ (isolates firm-specific reaction by netting out sector moves)
-- **Tone shift**: $\text{tone\_shift} = \text{sentiment}_{\text{Q\&A}} - \text{sentiment}_{\text{prepared}}$ (positive = tone improves under Q&A; negative = tone worsens)
-- Optional if available: **earnings surprise**: $\text{Surprise} = \text{EPS}_{\text{actual}} - \text{EPS}_{\text{consensus}}$ (control for beat/miss when testing language effects)
+- **Single-day return** on day *t*  
+  $r_t = \dfrac{P_t - P_{t-1}}{P_{t-1}}$
+- **Event-window return** from start to end date  
+  $R_{\text{window}} = \dfrac{P_{\text{end}} - P_{\text{start}}}{P_{\text{start}}}$
+- **Abnormal return** relative to a benchmark (here XBI)  
+  $\text{AR}_{\text{window}} = R_{\text{stock, window}} - R_{\text{benchmark, window}}$  
+  (isolates firm-specific reaction by netting out sector moves)
+- **Tone shift**  
+  $\text{tone\_shift} = \text{sentiment}_{\text{Q\&A}} - \text{sentiment}_{\text{prepared}}$  
+  (positive = tone improves under Q&A; negative = tone worsens)
+- Optional if available: **earnings surprise**  
+  $\text{Surprise} = \text{EPS}_{\text{actual}} - \text{EPS}_{\text{consensus}}$  
+  (control for beat/miss when testing language effects)
 
 ## Pipeline Overview
 1. **Transcripts**: Load HuggingFace dataset `glopardo/sp500-earnings-transcripts` and filter to Health Care.
