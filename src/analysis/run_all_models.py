@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .models import (
     compare_groups_ttest,
+    ensure_beat_miss_flag,
     load_features,
     run_linear_regression,
     run_logistic_downdrift_model,
@@ -23,6 +24,7 @@ def main() -> None:
     args = parser.parse_args()
 
     df = load_features(Path(args.config))
+    df = ensure_beat_miss_flag(df)
 
     print("=== Welch t-test: Q&A sentiment vs 5d abnormal return ===")
     ttest_res = compare_groups_ttest(df, feature="qa_sent_score", outcome="abn_ret_5d")
@@ -30,9 +32,21 @@ def main() -> None:
         print(f"{k}: {v}")
 
     print("\n=== OLS: returns explained by language features ===")
-    predictors = ["prep_sent_score", "qa_sent_score", "tone_shift", "qa_hedge_rate", "qa_risk_rate"]
+    predictors = [
+        "prep_sent_score",
+        "qa_sent_score",
+        "tone_shift",
+        "qa_hedge_rate",
+        "qa_risk_rate",
+        "beat_miss_flag",
+    ]
     ols_model = run_linear_regression(df, outcome="abn_ret_5d", predictors=predictors)
     print(summarize_regression(ols_model))
+
+    print("\n=== OLS: QA sentiment/tone shift controlling for beat/miss ===")
+    qa_predictors = ["qa_sent_score", "tone_shift", "beat_miss_flag"]
+    qa_ols = run_linear_regression(df, outcome="abn_ret_5d", predictors=qa_predictors)
+    print(summarize_regression(qa_ols))
 
     print("\n=== Logistic: predict >5% downside (abn_ret_5d < -5%) ===")
     log_res = run_logistic_downdrift_model(df)

@@ -6,6 +6,7 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 from finance.returns import compute_event_window_returns  # noqa: E402
+from finance.surprise import compute_beat_miss_flag  # noqa: E402
 
 
 def test_compute_event_window_returns():
@@ -42,3 +43,21 @@ def test_forward_window_uses_next_trading_day():
     # Forward 1d window (Saturday) should use Monday's price, not Friday's.
     assert abs(out.loc[0, "ret_1d"] - 0.2) < 1e-6
     assert abs(out.loc[0, "abn_ret_1d"] - 0.15) < 1e-6
+
+
+def test_beat_miss_flag_values():
+    dates = pd.date_range("2024-01-01", periods=5, freq="D")
+    prices = pd.DataFrame(
+        {
+            "AAA": [10.0, 11.0, 11.0, 10.0, 10.0],
+            "XBI": [10.0, 10.0, 10.0, 10.0, 10.0],
+        },
+        index=dates,
+    )
+
+    events = pd.DataFrame({"ticker": ["AAA", "AAA", "AAA"], "earnings_date": dates[:3]})
+    out = compute_event_window_returns(events, prices, benchmark_ticker="XBI", window_days=[1])
+    flags = compute_beat_miss_flag(out, ret_col="ret_1d")
+
+    assert set(flags.dropna().unique()) == {1, 0, -1}
+    assert list(flags.iloc[:3]) == [1, 0, -1]

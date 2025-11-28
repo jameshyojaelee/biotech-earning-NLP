@@ -10,6 +10,7 @@ import pandas as pd
 import yaml
 
 from .returns import compute_event_window_returns, download_price_history
+from .surprise import compute_beat_miss_flag
 
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
@@ -39,6 +40,7 @@ def main() -> None:
 
     prices = download_price_history(tickers, start=start, end=end)
     with_returns = compute_event_window_returns(events, prices, benchmark_ticker=benchmark, window_days=args.windows)
+    with_returns["beat_miss_flag"] = compute_beat_miss_flag(with_returns, ret_col="ret_1d")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with_returns.to_parquet(output_path, index=False)

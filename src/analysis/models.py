@@ -13,6 +13,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 import statsmodels.api as sm
 
+from finance.surprise import compute_beat_miss_flag
+
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
 
@@ -59,9 +61,18 @@ def summarize_regression(model) -> str:
     return model.summary().as_text()
 
 
+def ensure_beat_miss_flag(df: pd.DataFrame, ret_col: str = "ret_1d") -> pd.DataFrame:
+    """Add beat_miss_flag column if missing, using price reaction proxy."""
+    if "beat_miss_flag" not in df.columns or df["beat_miss_flag"].isna().all():
+        if ret_col in df.columns:
+            df = df.copy()
+            df["beat_miss_flag"] = compute_beat_miss_flag(df, ret_col=ret_col)
+    return df
+
+
 def run_logistic_downdrift_model(df: pd.DataFrame) -> dict:
     """Predict >5% abnormal downside within 5 days using logistic regression."""
-    df = df.copy()
+    df = ensure_beat_miss_flag(df.copy())
     df["label"] = (df["abn_ret_5d"] < -0.05).astype(int)
     features = [
         "qa_sent_score",
@@ -69,7 +80,12 @@ def run_logistic_downdrift_model(df: pd.DataFrame) -> dict:
         "tone_shift",
         "qa_hedge_rate",
         "qa_risk_rate",
+        "beat_miss_flag",
     ]
+    missing = [feat for feat in features if feat not in df.columns]
+    if missing:
+        return {"error": f"Missing features for logistic model: {missing}"}
+
     cols = features + ["earnings_date", "label"]
     clean = df.dropna(subset=cols).sort_values("earnings_date")
     if clean.empty:

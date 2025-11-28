@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Tuple
+from typing import List, Tuple
 
 import pandas as pd
 import yaml
@@ -27,6 +27,43 @@ def load_sp500_earnings_dataset(config_path: str) -> Tuple[dict, object]:
     return config, ds
 
 
+def flatten_segments_field(segments: object) -> pd.DataFrame:
+    """Convert a raw segments field into a DataFrame with speaker metadata."""
+    if segments is None:
+        return pd.DataFrame(columns=["speaker_role", "speaker_name", "text"])
+    if isinstance(segments, pd.DataFrame):
+        return segments
+    if not isinstance(segments, list):
+        return pd.DataFrame(columns=["speaker_role", "speaker_name", "text"])
+
+    df = pd.DataFrame(segments)
+    if df.empty:
+        return pd.DataFrame(columns=["speaker_role", "speaker_name", "text"])
+
+    text_col = None
+    for candidate in ["text", "content", "segment_text", "body"]:
+        if candidate in df.columns:
+            text_col = candidate
+            break
+    if text_col and "text" not in df.columns:
+        df["text"] = df[text_col]
+    df["text"] = df.get("text", pd.Series([None] * len(df), index=df.index))
+
+    if "speaker_role" not in df.columns:
+        for candidate in ["speaker", "speaker_name", "role", "speaker_title"]:
+            if candidate in df.columns:
+                df["speaker_role"] = df[candidate]
+                break
+    if "speaker_name" not in df.columns:
+        for candidate in ["speaker_name", "speaker", "speaker_role"]:
+            if candidate in df.columns:
+                df["speaker_name"] = df[candidate]
+                break
+
+    keep_cols: List[str] = [col for col in ["speaker_role", "speaker_name", "text"] if col in df.columns]
+    return df[keep_cols].copy()
+
+
 def filter_healthcare_calls(ds, sector: str = "Health Care") -> pd.DataFrame:
     """Convert the dataset to pandas and keep only Health Care earnings calls."""
     # Earnings calls are scheduled events where executives share results; the
@@ -34,7 +71,8 @@ def filter_healthcare_calls(ds, sector: str = "Health Care") -> pd.DataFrame:
     df = ds.to_pandas()
     # Focus on biotech/health care names so the analysis stays within one sector.
     filtered = df[df["sector"] == sector].copy()
-    keep_cols = ["ticker", "company", "sector", "earnings_date", "year", "quarter", "transcript"]
+    optional_segment_cols = [col for col in ["segments", "speaker_segments", "turns"] if col in filtered.columns]
+    keep_cols = ["ticker", "company", "sector", "earnings_date", "year", "quarter", "transcript", *optional_segment_cols]
     filtered = filtered[keep_cols]
     # The earnings_date anchors the event window used for return calculations.
     filtered["earnings_date"] = pd.to_datetime(filtered["earnings_date"], errors="coerce")
