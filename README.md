@@ -25,7 +25,7 @@ This project ingests biotech earnings call transcripts, scores sentiment, and li
   $AR_{window} = R_{stock,window} - R_{benchmark,window}$  
   (isolates firm-specific reaction by netting out sector moves)
 - **Tone shift**  
-  $tone\_shift = sentiment_{Q\\&A} - sentiment_{prepared}$  
+  $tone_shift = sentiment_{Q\\&A} - sentiment_{prepared}$  
   (positive = tone improves under Q&A; negative = tone worsens)
 - Optional if available: **earnings surprise**  
   $Surprise = EPS_{actual} - EPS_{consensus}$  
