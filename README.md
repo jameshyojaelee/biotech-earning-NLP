@@ -2,7 +2,7 @@
 
 ### Dashboard Preview
 ![Streamlit dashboard](assets/streamlit-dashboard.png)
-
+ 
 This project ingests biotech earnings call transcripts, scores sentiment, and links language to stock reactions around the event date. It focuses on the Q&A section because unscripted answers often reveal incremental information beyond the prepared remarks.
 
 ## Motivation & Approach
