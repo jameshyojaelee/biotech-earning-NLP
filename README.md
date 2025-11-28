@@ -1,6 +1,13 @@
 # Earnings NLP for Biotech
 
-This project ingests biotech earnings call transcripts, scores sentiment, and links language to stock reactions around the event date.
+This project ingests biotech earnings call transcripts, scores sentiment, and links language to stock reactions around the event date. It focuses on the Q&A section because unscripted answers often reveal incremental information beyond the prepared remarks.
+
+## Motivation & Approach
+- Split each transcript into **prepared remarks** (scripted) and **Q&A** (unscripted analyst questions and management answers).
+- Score sentiment with **FinBERT** for both sections; compute **tone_shift = Q&A − prepared** to capture changes in tone when management is pressed.
+- Add domain features such as **hedging language** and **regulatory-risk terms** common in biotech (e.g., FDA, clinical hold, adverse event).
+- Link calls to **price data** and compute **returns** and **abnormal returns** relative to a biotech benchmark (XBI) over short event windows (+1d, +5d).
+- Analyze how Q&A tone, tone shifts, and risk language relate to post-earnings reactions using t-tests, regression, and a simple logistic model.
 
 ## Key Concepts
 - **Earnings calls**: Company-hosted calls where executives discuss financial results and outlook with analysts and investors.
@@ -8,6 +15,27 @@ This project ingests biotech earnings call transcripts, scores sentiment, and li
 - **Stock returns**: Percentage change in a stock price over a period, e.g., 1-day or 5-day moves.
 - **Abnormal returns**: Stock returns minus a benchmark (here, a biotech ETF) to isolate firm-specific moves.
 - **Event windows**: Short windows around the earnings date (e.g., +1d, +5d) used to measure market reaction to the event.
+
+## Finance Math (event-study basics)
+- **Single-day return** on day \(t\):
+  \[
+  r_t = \frac{P_t - P_{t-1}}{P_{t-1}}
+  \]
+- **Event-window return** from start to end date:
+  \[
+  R_{\text{window}} = \frac{P_{\text{end}} - P_{\text{start}}}{P_{\text{start}}}
+  \]
+- **Abnormal return** relative to a benchmark (here XBI):
+  \[
+  \text{AR}_{\text{window}} = R_{\text{stock, window}} - R_{\text{benchmark, window}}
+  \]
+  This isolates firm-specific reaction by netting out sector moves.
+- **Tone shift**:
+  \[
+  \text{tone\_shift} = \text{sentiment}_{\text{Q\&A}} - \text{sentiment}_{\text{prepared}}
+  \]
+  Positive values mean the tone improved once analysts started asking questions; negative values mean tone worsened under scrutiny.
+- Optional if available: **earnings surprise** = \( \text{EPS}_{\text{actual}} - \text{EPS}_{\text{consensus}} \) to control for the numerical beat/miss component.
 
 ## Pipeline Overview
 1. **Transcripts**: Load HuggingFace dataset `glopardo/sp500-earnings-transcripts` and filter to Health Care.
