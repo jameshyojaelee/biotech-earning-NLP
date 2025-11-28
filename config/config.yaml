@@ -1,8 +1,10 @@
 hf_dataset_name: "glopardo/sp500-earnings-transcripts"
+hf_dataset_revision: ""  # optional HF dataset commit hash for reproducibility
 sector_filter: "Health Care"
 benchmark_ticker: "XBI"
 price_start_date: "2013-01-01"
 price_end_date: "2025-12-31"
+price_cache_dir: "data_raw/prices"
 events_base_path: "data_processed/events_base.parquet"
 events_with_returns_path: "data_processed/events_with_returns.parquet"
 events_with_sections_path: "data_processed/events_with_sections.parquet"

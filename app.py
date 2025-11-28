@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import altair as alt
 import streamlit as st
 import yaml
 
@@ -41,6 +42,8 @@ def main() -> None:
 
     tickers = sorted(df["ticker"].unique())
     ticker = st.sidebar.selectbox("Select ticker", tickers)
+    return_options = [col for col in ["abn_ret_1d", "abn_ret_5d"] if col in df.columns]
+    return_col = st.sidebar.selectbox("Return window", return_options, format_func=lambda x: x.replace("_", " "))
     ticker_df = df[df["ticker"] == ticker].sort_values("earnings_date")
 
     if ticker_df.empty:
@@ -52,10 +55,12 @@ def main() -> None:
     selected_date = pd.to_datetime(selected_date_str)
     row = ticker_df[ticker_df["earnings_date"].dt.date == selected_date.date()].iloc[-1]
 
+    other_col = "abn_ret_5d" if return_col == "abn_ret_1d" else "abn_ret_1d"
+
     st.subheader(f"{ticker} earnings on {selected_date.date()}")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Abnormal 1d", f"{row.get('abn_ret_1d', float('nan')):.2%}")
-    col2.metric("Abnormal 5d", f"{row.get('abn_ret_5d', float('nan')):.2%}")
+    col1.metric(return_col.replace("_", " "), f"{row.get(return_col, float('nan')):.2%}")
+    col2.metric(other_col.replace("_", " "), f"{row.get(other_col, float('nan')):.2%}")
     col3.metric("Tone shift (Q&A - Prepared)", f"{row.get('tone_shift', float('nan')):.3f}")
 
     st.markdown("### Sentiment trend (Q&A)")
@@ -64,11 +69,27 @@ def main() -> None:
     st.markdown("### Returns vs sentiment")
     st.bar_chart(ticker_df.set_index("earnings_date")[["abn_ret_1d", "abn_ret_5d"]])
 
+    st.markdown("### QA sentiment vs abnormal return")
+    scatter_data = ticker_df[["qa_sent_score", return_col, "earnings_date"]].dropna()
+    if not scatter_data.empty:
+        chart = (
+            alt.Chart(scatter_data)
+            .mark_circle(size=70, opacity=0.8, color="#64ffda")
+            .encode(x="qa_sent_score", y=return_col, tooltip=["earnings_date", "qa_sent_score", return_col])
+        )
+        trend = chart.transform_regression("qa_sent_score", return_col).mark_line(color="#ff7edb")
+        st.altair_chart(chart + trend, use_container_width=True)
+    else:
+        st.info("Not enough data to plot scatter.")
+
     st.markdown("### Transcripts")
     with st.expander("Prepared remarks"):
         st.write(row.get("prepared_text", ""))
     with st.expander("Q&A"):
         st.write(row.get("qa_text", ""))
+
+    csv_bytes = ticker_df.to_csv(index=False).encode("utf-8")
+    st.download_button("Download ticker history", data=csv_bytes, file_name=f"{ticker}_events.csv", mime="text/csv")
 
     st.markdown(
         "**Finance terms**: Earnings date = event anchor; abnormal return = stock minus XBI benchmark; event window = days after the event; tone shift = Q&A sentiment minus prepared sentiment."

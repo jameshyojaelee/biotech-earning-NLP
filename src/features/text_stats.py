@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import Iterable, List
 
 import pandas as pd
 
@@ -11,6 +11,7 @@ HEDGE_TERMS = [
     "may",
     "might",
     "could",
+    "can",
     "uncertain",
     "uncertainty",
     "visibility",
@@ -21,39 +22,69 @@ HEDGE_TERMS = [
     "expect",
     "believe",
     "should",
+    "plan to",
+    "expect to",
 ]
 
 RISK_TERMS = [
     "fda",
+    "fda approved",
+    "fda-approved",
     "trial hold",
     "clinical hold",
+    "enrollment delay",
+    "enrollment delays",
+    "enrollment paused",
+    "data cutoff",
     "adverse event",
     "adverse events",
+    "serious adverse event",
+    "serious adverse events",
+    "safety events",
     "safety signal",
     "black box",
     "recall",
     "delay",
     "setback",
     "pdufa",
+    "pdufa date",
     "crl",
+    "complete response letter",
     "phase i",
     "phase ii",
     "phase iii",
     "enrollment",
     "dropout",
     "serious adverse",
+    "type c meeting",
+    "breakthrough designation",
 ]
 
 
-def count_terms(text: str, term_list: Iterable[str]) -> int:
-    """Count occurrences of terms in a case-insensitive way."""
+def preprocess_text(text: str) -> List[str]:
+    """Lowercase and tokenize, normalizing punctuation and hyphens."""
     if not text:
+        return []
+    normalized = text.lower()
+    normalized = re.sub(r"[-]+", " ", normalized)  # keep hyphenated words searchable
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    tokens = re.findall(r"[a-z0-9]+", normalized)
+    return tokens
+
+
+def count_terms(text: str, term_list: Iterable[str]) -> int:
+    """Count occurrences allowing hyphenated and multi-word matches."""
+    tokens = preprocess_text(text)
+    if not tokens:
         return 0
-    lower = text.lower()
+    joined = " ".join(tokens)
     count = 0
     for term in term_list:
-        pattern = r"\b" + re.escape(term) + r"\b"
-        count += len(re.findall(pattern, lower))
+        term_tokens = preprocess_text(term)
+        if not term_tokens:
+            continue
+        pattern = r"(?<!\S)" + re.escape(" ".join(term_tokens)) + r"(?!\S)"
+        count += len(re.findall(pattern, joined))
     return count
 
 
@@ -66,8 +97,8 @@ def compute_qa_text_features(df: pd.DataFrame) -> pd.DataFrame:
 
     texts = df["qa_text"] if "qa_text" in df else pd.Series([], dtype=str)
     for text in texts:
-        words = text.split()
-        qa_word_counts.append(len(words))
+        tokens = preprocess_text(text)
+        qa_word_counts.append(len(tokens))
         hedge_counts.append(count_terms(text, HEDGE_TERMS))
         risk_counts.append(count_terms(text, RISK_TERMS))
 

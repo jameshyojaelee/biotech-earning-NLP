@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable, List, Optional
 
 import numpy as np
@@ -14,14 +15,7 @@ import yfinance as yf
 # isolate firm-specific moves around the event window (the days immediately
 # after the earnings date).
 
-def download_price_history(tickers: Iterable[str], start: str, end: str) -> pd.DataFrame:
-    """Download adjusted close prices for tickers using yfinance."""
-    tickers = list(tickers)
-    data = yf.download(tickers, start=start, end=end, auto_adjust=True, progress=False)
-
-    # Handle the different shapes returned by yfinance:
-    # - MultiIndex columns when requesting multiple tickers
-    # - Single-index columns for one ticker
+def _normalize_price_df(data, tickers: List[str]) -> pd.DataFrame:
     if isinstance(data, pd.DataFrame):
         if isinstance(data.columns, pd.MultiIndex):
             if "Adj Close" in data.columns.get_level_values(0):
@@ -29,14 +23,89 @@ def download_price_history(tickers: Iterable[str], start: str, end: str) -> pd.D
             else:
                 prices = data["Close"].copy()
         else:
-            if "Adj Close" in data.columns:
+            if len(tickers) == 1 and tickers[0] in data.columns:
+                prices = data[[tickers[0]]]
+            elif "Adj Close" in data.columns:
                 prices = data["Adj Close"].to_frame(name=tickers[0])
-            else:
+            elif "Close" in data.columns:
                 prices = data["Close"].to_frame(name=tickers[0])
-    else:  # Single series
+            else:
+                prices = data.copy()
+    else:  # Series
         prices = data.to_frame(name=tickers[0])
 
     prices.index = pd.to_datetime(prices.index)
+    prices = prices.sort_index()
+    return prices
+
+
+def _cache_path(cache_dir: Path, ticker: str) -> Path:
+    return cache_dir / f"{ticker}.parquet"
+
+
+def _load_cached_prices(cache_dir: Path, ticker: str) -> Optional[pd.DataFrame]:
+    path = _cache_path(cache_dir, ticker)
+    if not path.exists():
+        return None
+    df = pd.read_parquet(path)
+    df.index = pd.to_datetime(df.index)
+    if ticker not in df.columns and len(df.columns) == 1:
+        df = df.rename(columns={df.columns[0]: ticker})
+    return df[[ticker]].sort_index()
+
+
+def _save_prices_to_cache(cache_dir: Path, ticker: str, prices: pd.DataFrame) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    prices[[ticker]].to_parquet(_cache_path(cache_dir, ticker))
+
+
+def download_price_history(
+    tickers: Iterable[str],
+    start: str,
+    end: str,
+    price_cache_dir: Optional[Path] = None,
+    refresh_cache: bool = False,
+) -> pd.DataFrame:
+    """Download adjusted close prices for tickers using yfinance with caching."""
+    tickers = list(tickers)
+    start_dt = pd.to_datetime(start)
+    end_dt = pd.to_datetime(end)
+    cache_dir = Path(price_cache_dir) if price_cache_dir else None
+
+    cached_frames: List[pd.DataFrame] = []
+    missing: List[str] = []
+
+    if cache_dir and not refresh_cache:
+        for ticker in tickers:
+            cached = _load_cached_prices(cache_dir, ticker)
+            if cached is not None:
+                coverage_ok = (cached.index.min() <= start_dt) and (cached.index.max() >= end_dt)
+                if coverage_ok:
+                    cached_frames.append(cached)
+                    continue
+            missing.append(ticker)
+    else:
+        missing = tickers.copy()
+
+    downloaded = pd.DataFrame()
+    if missing:
+        data = yf.download(missing, start=start_dt, end=end_dt, auto_adjust=True, progress=False)
+        downloaded = _normalize_price_df(data, missing)
+        for ticker in missing:
+            if ticker in downloaded.columns and cache_dir:
+                _save_prices_to_cache(cache_dir, ticker, downloaded)
+
+    all_frames = []
+    if not downloaded.empty:
+        all_frames.append(downloaded)
+    all_frames.extend(cached_frames)
+
+    if not all_frames:
+        return pd.DataFrame()
+
+    prices = pd.concat(all_frames, axis=1)
+    prices = prices.loc[(prices.index >= start_dt) & (prices.index <= end_dt)]
+    prices = prices.sort_index()
     return prices
 
 

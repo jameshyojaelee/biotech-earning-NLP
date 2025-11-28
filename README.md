@@ -47,7 +47,12 @@ This project ingests biotech earnings call transcripts, scores sentiment, and li
 5. Split transcripts: `python src/preprocess/split_all_transcripts.py --config config/config.yaml`
 6. Add sentiment: `python src/features/compute_sentiment_features.py --config config/config.yaml`
 7. Add text stats: `python src/features/compute_text_stats.py --config config/config.yaml`
-8. Explore: run `streamlit run app.py` or open `notebooks/01_exploration.ipynb`.
+8. Explore: run `streamlit run app.py`, open `notebooks/01_exploration.ipynb`, or generate plots/tables with `python -m src.analysis.save_figs_and_tables --config config/config.yaml` (outputs to `assets/plots/` and `data_processed/`).
+
+## Reproducibility
+- Set `hf_dataset_revision` in `config/config.yaml` to pin the HuggingFace dataset commit. The ingest step logs the revision used.
+- Prices are cached per ticker under `price_cache_dir` (default `data_raw/prices`). Pass `--refresh-cache` to `compute_returns_for_events.py` to force a redownload.
+- Saved analysis artifacts: plots live in `assets/plots/` and summary tables (e.g., regression coefficients) in `data_processed/` when you run the analysis notebook or `save_figs_and_tables` script.
 
 ## Dashboard Preview
 ![Streamlit dashboard](assets/streamlit-dashboard.png)

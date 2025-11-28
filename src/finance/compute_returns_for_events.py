@@ -25,6 +25,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compute returns and abnormal returns for events.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG), help="Path to config.yaml")
     parser.add_argument("--windows", nargs="*", type=int, default=[1, 5], help="Forward day windows to compute")
+    parser.add_argument("--refresh-cache", action="store_true", help="Redownload prices instead of using cache")
     args = parser.parse_args()
 
     config = load_config(Path(args.config))
@@ -34,11 +35,18 @@ def main() -> None:
     benchmark = config.get("benchmark_ticker", "XBI")
     start = config.get("price_start_date", "2013-01-01")
     end = config.get("price_end_date", "2025-12-31")
+    price_cache_dir = config.get("price_cache_dir")
 
     events = pd.read_parquet(events_path)
     tickers: List[str] = sorted(set(events["ticker"].unique().tolist()) | {benchmark})
 
-    prices = download_price_history(tickers, start=start, end=end)
+    prices = download_price_history(
+        tickers,
+        start=start,
+        end=end,
+        price_cache_dir=price_cache_dir,
+        refresh_cache=args.refresh_cache,
+    )
     with_returns = compute_event_window_returns(events, prices, benchmark_ticker=benchmark, window_days=args.windows)
     with_returns["beat_miss_flag"] = compute_beat_miss_flag(with_returns, ret_col="ret_1d")
 

@@ -23,7 +23,9 @@ def load_sp500_earnings_dataset(config_path: str) -> Tuple[dict, object]:
     """Load the configured HuggingFace dataset of S&P 500 earnings calls."""
     config = load_config(Path(config_path))
     dataset_name = config.get("hf_dataset_name", "glopardo/sp500-earnings-transcripts")
-    ds = load_dataset(dataset_name, split="train")
+    revision = config.get("hf_dataset_revision") or None
+    ds = load_dataset(dataset_name, revision=revision, split="train")
+    print(f"Loaded dataset {dataset_name} at revision {revision or 'latest'}")
     return config, ds
 
 
