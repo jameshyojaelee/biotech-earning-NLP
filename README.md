@@ -22,13 +22,13 @@ This project ingests biotech earnings call transcripts, scores sentiment, and li
 - **Event-window return** from start to end date  
   $R_{\text{window}} = \dfrac{P_{\text{end}} - P_{\text{start}}}{P_{\text{start}}}$
 - **Abnormal return** relative to a benchmark (here XBI)  
-  $\text{AR}_{\text{window}} = R_{\text{stock, window}} - R_{\text{benchmark, window}}$  
+  $AR_{window} = R_{stock,window} - R_{benchmark,window}$  
   (isolates firm-specific reaction by netting out sector moves)
 - **Tone shift**  
-  $\text{tone\_shift} = \text{sentiment}_{\text{Q\&A}} - \text{sentiment}_{\text{prepared}}$  
+  $tone\_shift = sentiment_{Q\&A} - sentiment_{prepared}$  
   (positive = tone improves under Q&A; negative = tone worsens)
 - Optional if available: **earnings surprise**  
-  $\text{Surprise} = \text{EPS}_{\text{actual}} - \text{EPS}_{\text{consensus}}$  
+  $Surprise = EPS_{actual} - EPS_{consensus}$  
   (control for beat/miss when testing language effects)
 
 ## Pipeline Overview
