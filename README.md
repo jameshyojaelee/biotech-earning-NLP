@@ -51,6 +51,107 @@ This project ingests biotech earnings call transcripts, scores sentiment, and li
 3. **Event Returns**: Pull prices via `yfinance`, compute 1-day and 5-day returns plus benchmark-adjusted abnormal returns.
 4. **Analysis**: Explore distributions, run statistical tests, and build simple predictive models on language features.
 
+## Methodology (more depth)
+This repo is intentionally simple and transparent: most of the “NLP” is feature engineering around (1) a pretrained sentiment model and (2) interpretable term-count features. The goal is to make it easy to iterate on domain hypotheses (e.g., “risk language in Q&A predicts downside”) without a heavy modeling stack.
+
+### 1) Universe + event table
+- **Source**: Hugging Face dataset `glopardo/sp500-earnings-transcripts` (loaded via `datasets.load_dataset`).
+- **Filter**: keep only records where `sector == "Health Care"` (configurable via `sector_filter`).
+- **Output**: a base “events” table with `ticker`, `company`, `earnings_date`, and `transcript` (plus any available structured speaker segments) saved to `data_processed/events_base.parquet`.
+
+Implemented in `src/ingest/hf_ingest.py`.
+
+### 2) Transcript splitting (Prepared remarks vs Q&A)
+Earnings calls typically have a scripted “prepared” portion followed by a less-scripted Q&A. This project uses two splitting strategies:
+
+1. **Preferred: structured speaker segments (when available)**  
+   If the dataset includes a `segments` column, we use speaker metadata to decide when Q&A starts:
+   - classify each segment as `management`, `analyst`, `operator`, or `other` (heuristics based on `speaker_role` text)
+   - treat the **first analyst segment** as the start of Q&A
+   - skip operator segments (they mostly mark boundaries)
+   - concatenate text into `prepared_text` (pre-Q&A) and `qa_text` (Q&A)
+
+2. **Fallback: regex split on raw transcript text**  
+   If structured segments are missing, we split the raw transcript at the first “Q&A”-style marker such as:
+   - “Question-and-Answer”, “Q&A”, “Q & A”
+   - or common cues like `Operator:` / `Analyst:` if explicit markers are missing
+
+Implemented in `src/preprocess/structured_split.py`, `src/preprocess/transcript_splitter.py`, and orchestrated by `src/preprocess/split_all_transcripts.py`.
+
+### 3) Sentiment scoring (FinBERT)
+We score sentiment separately for prepared remarks and Q&A using **FinBERT** (`ProsusAI/finbert`) through the Hugging Face `transformers` pipeline:
+
+- **Chunking**: transcripts can exceed model limits, so we split text into ~256-word chunks and score each chunk independently.
+- **Per-chunk inference**: for each chunk, FinBERT returns a label (`positive` / `negative` / `neutral`) and a confidence score.
+- **Aggregation**: we average the chunk-level scores by label and compute a signed sentiment score:
+  - `sentiment_score = mean(pos_scores) - mean(neg_scores)`
+
+Saved features (two copies: one for prepared, one for Q&A):
+- `prep_sent_pos`, `prep_sent_neg`, `prep_sent_neu`, `prep_sent_score`
+- `qa_sent_pos`, `qa_sent_neg`, `qa_sent_neu`, `qa_sent_score`
+- `tone_shift = qa_sent_score - prep_sent_score`
+
+Implemented in `src/features/sentiment_finbert.py` and run via `src/features/compute_sentiment_features.py`.
+
+### 4) Interpretable domain features (hedging + biotech risk language)
+To capture “uncertainty” and “biotech/regulatory risk” beyond generic sentiment, we add simple term-count features on the **Q&A text**:
+
+- **Preprocessing**: lowercase, normalize hyphens, remove punctuation, then tokenize.
+- **Matching**: count exact matches for single- and multi-word phrases (e.g., “clinical hold”, “adverse event”).
+- **Rates**: normalize by Q&A word count for comparability across calls:
+  - `qa_hedge_rate = qa_hedge_terms / qa_word_count`
+  - `qa_risk_rate = qa_risk_terms / qa_word_count`
+
+Outputs:
+- `qa_word_count`
+- `qa_hedge_terms`, `qa_hedge_rate`
+- `qa_risk_terms`, `qa_risk_rate`
+
+Implemented in `src/features/text_stats.py` and run via `src/features/compute_text_stats.py`.
+
+### 5) Returns + abnormal returns (simple event study)
+We link each earnings event to price action using `yfinance` with optional caching (default: `data_raw/prices/`).
+
+For each window `w` in days (default `w ∈ {1, 5}`):
+- `base_price`: last available close **on or before** `earnings_date`
+- `end_price`: first available close **on or after** `earnings_date + w days`
+- `ret_{w}d = (end_price - base_price) / base_price`
+- `bench_ret_{w}d`: same calculation for the benchmark ticker (default: XBI)
+- `abn_ret_{w}d = ret_{w}d - bench_ret_{w}d`
+
+This abnormal return is a deliberately simple “stock minus sector ETF” adjustment (not a factor model).
+
+Also included:
+- `beat_miss_flag`: a {-1, 0, 1} proxy derived from `ret_1d` (positive/zero/negative), used as a lightweight control when consensus surprise data is unavailable.
+
+Implemented in `src/finance/returns.py`, `src/finance/compute_returns_for_events.py`, and `src/finance/surprise.py`.
+
+### 6) Statistical tests + baseline predictive models
+The analysis step is meant to answer: “Do these language features *relate* to post-earnings moves?” It includes:
+
+- **Welch t-test** (`scipy.stats.ttest_ind`): compares outcomes (e.g., `abn_ret_5d`) between “low” vs “high” groups of a language feature using a quantile threshold (median by default).
+- **OLS regression** (`statsmodels.OLS`): explains abnormal returns from sentiment + term-rate features (with an intercept).
+- **Logistic regression baseline** (`sklearn.linear_model.LogisticRegression`): predicts a downside event:
+  - label: `1` if `abn_ret_5d < -0.05` else `0`
+  - features: `qa_sent_score`, `prep_sent_score`, `tone_shift`, `qa_hedge_rate`, `qa_risk_rate`, `beat_miss_flag`
+  - evaluation: an 80/20 **time-ordered** split by `earnings_date` to reduce lookahead bias
+
+Implemented in `src/analysis/models.py`, run via `src/analysis/run_all_models.py`, and summarized/visualized by `src/analysis/save_figs_and_tables.py`.
+
+### 7) What the final dataset contains
+After running the pipeline, `data_processed/events_with_features.parquet` will typically include:
+- Identifiers: `ticker`, `company`, `earnings_date`
+- Text: `prepared_text`, `qa_text`
+- Sentiment: `prep_*`, `qa_*`, `tone_shift`
+- Text stats: `qa_word_count`, `qa_hedge_*`, `qa_risk_*`
+- Finance: `ret_1d`, `ret_5d`, `bench_ret_*`, `abn_ret_*`, `beat_miss_flag`
+
+### 8) Practical caveats (important)
+- **Timing**: `earnings_date` is used as the event anchor, but real-world earnings can be pre-market/after-hours; these returns are a reasonable approximation, not a perfect microstructure event study.
+- **Window definition**: the “+1d/+5d” windows are based on calendar-day offsets, then snapped to the nearest available trading closes.
+- **FinBERT domain fit**: FinBERT is finance-tuned but not biotech-specific; some regulatory/clinical phrasing can be misread.
+- **Models are baselines**: the regression/logistic steps are for exploration and interpretability, not optimized production forecasting.
+
 ## Getting Started
 1. Install dependencies: `pip install -r requirements.txt`
 2. Configure paths and tickers in `config/config.yaml`.
